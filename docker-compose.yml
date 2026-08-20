@@ -1,0 +1,32 @@
+services:
+  dsh:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: deepseek-harness
+    ports:
+      - "127.0.0.1:3080:3080"
+    environment:
+      NODE_ENV: production
+      PORT: 3081
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
+      DEEPSEEK_BASE_URL: ${DEEPSEEK_BASE_URL:-}
+    restart: unless-stopped
+    command: >
+      sh -c '
+        node -e "
+          const net = require(\"node:net\");
+          net.createServer(client => {
+            const upstream = net.connect(3081, \"127.0.0.1\");
+            client.pipe(upstream);
+            upstream.pipe(client);
+            const close = () => {
+              client.destroy();
+              upstream.destroy();
+            };
+            client.on(\"error\", close);
+            upstream.on(\"error\", close);
+          }).listen(3080, \"0.0.0.0\");
+        " &
+        exec node --import tsx/esm apps/cli/src/bin.ts web --no-open --port 3081
+      '
